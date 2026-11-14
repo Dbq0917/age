@@ -24,6 +24,10 @@ func TestMain(m *testing.M) {
 			testOnlyConfigureScryptIdentity = func(r *age.ScryptRecipient) {
 				r.SetWorkFactor(10)
 			}
+			// Files encrypted by testOnlyConfigureScryptIdentity use a work
+			// factor of 10, so anything above that exercises the legacy
+			// high work factor path.
+			defaultMaxScryptWorkFactor = 10
 			testOnlyFixedRandomWord = "four"
 			main()
 		},

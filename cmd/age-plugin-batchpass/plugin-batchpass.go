@@ -68,8 +68,9 @@ a file descriptor. Trailing newlines are stripped from the file contents.
 
 When encrypting, you can set AGE_PASSPHRASE_WORK_FACTOR to adjust the scrypt
 work factor (between 1 and 30, default 18). Higher values are more secure
-but slower. The age CLI refuses to decrypt files above 22, and so does this
-plugin unless AGE_PASSPHRASE_MAX_WORK_FACTOR is set to at least the same value.
+but slower. The age CLI asks for interactive confirmation to decrypt files
+above 22, and this plugin refuses them unless AGE_PASSPHRASE_MAX_WORK_FACTOR
+is set to at least the same value.
 
 When decrypting, you can set AGE_PASSPHRASE_MAX_WORK_FACTOR to change the
 maximum scrypt work factor accepted (between 1 and 30, default 22). This can

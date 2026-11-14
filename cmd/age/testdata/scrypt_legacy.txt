@@ -1,0 +1,44 @@
+[!linux] [!darwin] skip # no pty support
+
+# legacy.age is passphrase-encrypted ("password") with a scrypt work factor
+# of 2^11, above the test-only default maximum of 2^10 set by TestMain.
+
+# decrypt a legacy high work factor file, confirming the prompt
+ttyin confirm
+age -d legacy.age
+ttyout 'Decrypt anyway'
+stderr 'high scrypt work factor'
+cmp stdout input
+
+# declining the prompt refuses to decrypt
+ttyin decline
+! age -d legacy.age
+stderr 'scrypt work factor too large: 11'
+
+# files beyond the absolute maximum work factor are always rejected
+ttyin confirm
+! age -d crafted.age
+stderr 'scrypt work factor too large: 31'
+! ttyout 'Decrypt anyway'
+
+-- confirm --
+y
+password
+-- decline --
+n
+-- input --
+test
+-- legacy.age --
+-----BEGIN AGE ENCRYPTED FILE-----
+YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBpSUhaQ3JGcFNuTk8vOU9u
+MVM5UXlRIDExCmVmTkVNSlJHR3psQytTM2VackxlNzkyVFkxMTFoOXV4S2hsOWl3
+ekg2TUUKLS0tIG1Mb2JpcmF4cVJkL3NNdGVGS09ON1BoWFFQdTJXQUIvd0dNWTZZ
+VjhRZHMK31DMs/h09E7LqWZd08qZah0jRjuPiUTfstJFYpSpLX9OT6EUKQ==
+-----END AGE ENCRYPTED FILE-----
+-- crafted.age --
+-----BEGIN AGE ENCRYPTED FILE-----
+YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBpSUhaQ3JGcFNuTk8vOU9u
+MVM5UXlRIDMxCmVmTkVNSlJHR3psQytTM2VackxlNzkyVFkxMTFoOXV4S2hsOWl3
+ekg2TUUKLS0tIG1Mb2JpcmF4cVJkL3NNdGVGS09ON1BoWFFQdTJXQUIvd0dNWTZZ
+VjhRZHMK31DMs/h09E7LqWZd08qZah0jRjuPiUTfstJFYpSpLX9OT6EUKQ==
+-----END AGE ENCRYPTED FILE-----

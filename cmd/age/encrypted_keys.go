@@ -8,9 +8,24 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"filippo.io/age"
+	"filippo.io/age/internal/term"
 )
+
+// defaultMaxScryptWorkFactor is the maximum scrypt work factor (logN)
+// accepted without interactive confirmation. It matches the default of
+// age.ScryptIdentity (see NewScryptIdentity). It's a variable so it can be
+// lowered in tests.
+var defaultMaxScryptWorkFactor = 22
+
+// absoluteMaxScryptWorkFactor is the highest work factor that
+// age.ScryptRecipient can encode (see SetWorkFactor). Files with a higher
+// work factor are rejected unconditionally, as they would take unreasonable
+// resources to decrypt even with user confirmation.
+const absoluteMaxScryptWorkFactor = 30
 
 // LazyScryptIdentity is an age.Identity that requests a passphrase only if it
 // encounters an scrypt stanza. After obtaining a passphrase, it delegates to
@@ -30,6 +45,10 @@ func (i *LazyScryptIdentity) Unwrap(stanzas []*age.Stanza) (fileKey []byte, err 
 	if len(stanzas) != 1 || stanzas[0].Type != "scrypt" {
 		return nil, age.ErrIncorrectIdentity
 	}
+	maxWorkFactor, err := checkScryptWorkFactor(stanzas[0])
+	if err != nil {
+		return nil, err
+	}
 	pass, err := i.Passphrase()
 	if err != nil {
 		return nil, fmt.Errorf("could not read passphrase: %v", err)
@@ -37,6 +56,9 @@ func (i *LazyScryptIdentity) Unwrap(stanzas []*age.Stanza) (fileKey []byte, err 
 	ii, err := age.NewScryptIdentity(pass)
 	if err != nil {
 		return nil, err
+	}
+	if maxWorkFactor != 0 {
+		ii.SetMaxWorkFactor(maxWorkFactor)
 	}
 	fileKey, err = ii.Unwrap(stanzas)
 	if errors.Is(err, age.ErrIncorrectIdentity) {
@@ -48,6 +70,41 @@ func (i *LazyScryptIdentity) Unwrap(stanzas []*age.Stanza) (fileKey []byte, err 
 		return nil, fmt.Errorf("incorrect passphrase")
 	}
 	return fileKey, err
+}
+
+// checkScryptWorkFactor inspects the work factor of an scrypt stanza. If it
+// exceeds the default maximum, the file was probably encrypted before the
+// current limit was introduced, and the user is asked to confirm the slower
+// decryption. It returns the maximum work factor to set on the identity, or
+// zero to use the library default.
+func checkScryptWorkFactor(s *age.Stanza) (int, error) {
+	if len(s.Args) != 2 {
+		// Let the library return a proper error.
+		return 0, nil
+	}
+	logN, err := strconv.Atoi(s.Args[1])
+	if err != nil {
+		// Let the library return a proper error.
+		return 0, nil
+	}
+	if logN > absoluteMaxScryptWorkFactor {
+		return 0, fmt.Errorf("scrypt work factor too large: %d", logN)
+	}
+	if logN <= defaultMaxScryptWorkFactor {
+		return 0, nil
+	}
+	warningf("file uses a high scrypt work factor (2^%d), decryption may be very slow", logN)
+	// ReadSecret is used instead of ReadPublic because the latter buffers
+	// more than one line of input, which would swallow the passphrase if it
+	// was already typed or piped to the terminal.
+	answer, err := term.ReadSecret("Decrypt anyway? [y/N]")
+	if err != nil {
+		return 0, fmt.Errorf("scrypt work factor too large: %d (to decrypt non-interactively, use the batchpass plugin with AGE_PASSPHRASE_MAX_WORK_FACTOR=%d)", logN, logN)
+	}
+	if a := strings.ToLower(strings.TrimSpace(string(answer))); a != "y" && a != "yes" {
+		return 0, fmt.Errorf("scrypt work factor too large: %d", logN)
+	}
+	return logN, nil
 }
 
 type EncryptedIdentity struct {
